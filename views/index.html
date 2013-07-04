@@ -1,0 +1,173 @@
+<html>
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="author" content="Shabihul Abdi" />
+	<script src="/socket.io/socket.io.js"></script>
+	<script src="http://code.jquery.com/jquery-1.8.3.min.js"></script>
+	<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet" media="screen">
+	<script src="bootstrap/js/bootstrap.min.js"></script>
+	<link href="bootstrap/css/bootstrap-responsive.css" rel="stylesheet">
+    <style type="text/css">
+      div.scroll {
+		overflow: auto;
+		border: 1px solid #666;
+		padding: 8px;
+		}
+    </style>
+    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB9eP5e916ekJsV0dD2yj__tWHF9E2k4f4&sensor=true">
+    </script>
+    <script type="text/javascript">
+      var map;
+      var markers = new Array();
+      var infoWindow = new google.maps.InfoWindow({});
+      function initialize() {
+      	navigator.geolocation.getCurrentPosition(setupMap, error);
+      }
+      
+      function setupMap(position) {
+      	  var mapOptions = {
+          center: new google.maps.LatLng(position.coords.latitude,position.coords.longitude),
+          zoom: 10,
+          mapTypeId: google.maps.MapTypeId.ROADMAP
+        };
+        map = new google.maps.Map(document.getElementById("map_canvas"), mapOptions);      
+      }
+      
+      function error(msg) {
+      	alert(msg);
+      }
+      function clearMarkers() {
+	     infoWindow.close();
+	     for(var i = 0; i < markers.length; i++) {
+	         markers[i].setMap(null);
+	     }
+	     markers.length = 0;
+	  }
+	  function callEndpoint() {
+	  	console.log($('#search').val());
+	  	$('#bar').show();
+	  	$("#thetable").find("tr:gt(0)").remove();
+	  	$("#yelptable").find("tr:gt(0)").remove();
+	  	clearMarkers();
+	  	$.get('/akaname/'+$('#search').val(), function(data) {
+	  		console.log('Load Data');
+	  	});
+	  }
+	  function AutoCenter() {
+		//  Create a new viewpoint bound
+		var bounds = new google.maps.LatLngBounds();
+		//  Go through each...
+		$.each(markers, function (index, marker) {
+			bounds.extend(marker.position);
+		});
+		//  Fit these bounds to the map
+		map.fitBounds(bounds);
+		if(markers.length == 1) {
+			map.setZoom(16); 
+		} else {
+			map.setZoom(10);
+		}
+	 }
+	function toTitleCase(str) {
+	    return str.replace(/(?:^|\s)\w/g, function(match) {
+	        return match.toUpperCase();
+	    });
+	}
+	function noenter(ev)  {
+        if (window.event && window.event.keyCode == 13 || ev.which == 13) {
+            callEndpoint();
+            return false;
+         } else {
+         	callEndpoint();
+            return true;
+         }
+     }
+	</script>
+</head>
+<body onload="initialize()">
+	<script>
+		  var socket = io.connect(window.location.hostname);
+		  socket.on('connect', function () {
+		  	console.log("Connected to Socket IO");
+		  });
+		  socket.on('city', function (data) {
+		    var parsed_data = JSON.parse(data);
+		    $('#thetable').append('<tr class="success"><td>'+toTitleCase(parsed_data.aka_name.toLowerCase())+'</td><td>'+parsed_data.risk+'</td><td>'+parsed_data.address+'</td><td>'+parsed_data.results+'</td><td>'+parsed_data.inspection_date+'</td></tr>');
+		  	var myLatlng = new google.maps.LatLng(parsed_data.location.latitude,parsed_data.location.longitude);
+			var marker = new google.maps.Marker({
+			    position: myLatlng,
+			    title: parsed_data.address
+			});
+	        google.maps.event.addListener(marker, "click", function(event) {
+	            infoWindow.setContent(parsed_data.address + '<br/>' + parsed_data.violations);
+	            infoWindow.open(map, this);
+	         });
+			marker.setMap(map); 
+			markers.push(marker);
+			AutoCenter();
+			$('#bar').hide();
+		  });
+		  socket.on('yelp', function (data) {
+		  		console.log(data);
+		  		 $('#yelptable').append('<tr class="error"><td>'+data.name+'</td><td>'+data.rating+'</td><td>'+data.location.address[0]+'</td>');
+		  });
+	</script>
+ <div class="container-fluid">
+      <div class="row-fluid">
+        <div class="span12">
+            <h2><img width="75" height="75" src="http://www.forensicgenealogy.info/images/chicago-flag-5-stars.jpg"/> Restaurant Inspector</h2>
+            <p>
+            	<div class="input-append">
+					<input id="search" type="text" class="span3">
+			    	<button type="button" onkeypress="return noenter(event);" class="btn" onclick="callEndpoint();">Search</button>
+			    </div>
+				<div id="bar" class="progress progress-striped active" style="display: none">
+					<div class="bar bar-success" style="width: 50%;"></div>
+					<div class="bar bar-danger" style="width: 50%;"></div>
+				</div>
+            </p>
+          <div class="row-fluid">
+          	<div class="span4">
+          		<span class="label label-info">Location Map</span>
+          		<div id="map_canvas" style="width:100%; height:60%"></div>
+          	</div>
+          	<div class="span4">
+	          	<span class="label label-success">City of Chicago Data Portal</span>
+	          	<div style="height:60%; overflow:scroll;">
+				<table id="thetable" class="table table-striped">
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Risk</th>
+							<th>Address</th>
+							<th>Results</th>
+							<th>Date</th>
+						</tr>
+					</thead>
+					<tbody>
+					</tbody>
+				</table>
+	          </div>
+          </div>
+          <div class="span4">
+            <span class="label label-important">Yelp Chicago</span>
+         	<div style="height:60%; overflow:scroll;">
+			<table id="yelptable" class="table table-striped">
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>Rating</th>
+						<th>Address</th>
+					</tr>
+				</thead>
+				<tbody>
+				</tbody>
+			</table>
+          </div><!--/row--> 
+          </div>         
+        </div><!--/span-->
+      </div><!--/row-->     
+      </div>	
+</body>
+</html>
+
